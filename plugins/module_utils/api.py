@@ -353,6 +353,9 @@ class WapiModule(WapiBase):
         # get object reference
         ib_obj_ref, update, new_name = self.get_object_ref(self.module, ib_obj_type, obj_filter, ib_spec)
 
+        if ib_obj_type == NIOS_HOST_RECORD and len(ib_obj_ref) > 1 and not self.module.params.get('ipv4addrs'):
+            self.module.fail_json(msg='Multiple host records found. Provide an IP address to delete a specific record.')
+
         # When a range update is defined, check for a range that matches the target range definition as well
         # to allows for idempotence
         if ib_obj_type == NIOS_RANGE and len(ib_obj_ref) == 0 and \
