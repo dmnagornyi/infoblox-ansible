@@ -102,6 +102,42 @@ class TestNiosHostRecordModule(TestNiosModule):
         self.assertTrue(res['changed'])
         wapi.delete_object.assert_called_once_with(ref)
 
+    def test_nios_host_record_remove_ipam_only(self):
+        self.module.params = {'provider': None, 'state': 'absent', 'name': 'ansible',
+                              'comment': None, 'extattrs': None, 'configure_for_dns': False}
+
+        dns_ref = "record:host/ZG5zLm5ldHdvcmtfdmlldyQw:ansible/true"
+        ipam_ref = "record:host/ZG5zLm5ldHdvcmtfdmlldyQw:ansible/false"
+
+        test_object = [
+            {
+                "comment": "dns host",
+                "_ref": dns_ref,
+                "name": "ansible",
+                "configure_for_dns": True,
+                "extattrs": {}
+            },
+            {
+                "comment": "ipam host",
+                "_ref": ipam_ref,
+                "name": "ansible",
+                "configure_for_dns": False,
+                "extattrs": {}
+            }
+        ]
+
+        test_spec = {
+            "name": {"ib_req": True},
+            "comment": {},
+            "extattrs": {},
+            "configure_for_dns": {"ib_req": True}
+        }
+
+        wapi = self._get_wapi(test_object)
+        res = wapi.run(api.NIOS_HOST_RECORD, test_spec)
+        self.assertTrue(res['changed'])
+        wapi.delete_object.assert_called_once_with(ipam_ref)
+
     def test_nios_host_record_update_comment(self):
         self.module.params = {'provider': None, 'state': 'present', 'name': 'default',
                               'comment': 'updated comment', 'extattrs': None}
