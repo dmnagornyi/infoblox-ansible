@@ -226,6 +226,41 @@ class TestNiosApi(unittest.TestCase):
         self.assertTrue(res['changed'])
         wapi.delete_object.assert_called_once_with(ref)
 
+    def test_wapi_host_delete_ambiguous(self):
+        self.module.params = {'provider': {}, 'state': 'absent', 'name': 'host'}
+
+        test_object = [
+            {
+                '_ref': 'record:host/ZG5zLmhvc3QkMQ:host/false',
+                'name': 'host',
+                'ipv4addrs': [{'ipv4addr': '192.168.1.1'}]
+            },
+            {
+                '_ref': 'record:host/ZG5zLmhvc3QkMg:host/false',
+                'name': 'host',
+                'ipv4addrs': [{'ipv4addr': '192.168.1.2'}]
+            }
+        ]
+
+        test_spec = {
+            'name': {'ib_req': True},
+            'ipv4addrs': {}
+        }
+
+        wapi = api.WapiModule(self.module)
+        self.module.fail_json.side_effect = Exception('failed')
+        wapi.get_object_ref = Mock(return_value=(test_object, None, None))
+        wapi.create_object = Mock()
+        wapi.update_object = Mock()
+        wapi.delete_object = Mock()
+
+        with self.assertRaises(Exception):
+            wapi.run(api.NIOS_HOST_RECORD, test_spec)
+
+        self.module.fail_json.assert_called_once_with(
+            msg='Multiple host records found. Provide an IP address to delete a specific record.'
+        )
+
     def test_wapi_strip_network_view(self):
         self.module.params = {'provider': None, 'state': 'present', 'name': 'ansible',
                               'comment': 'updated comment', 'extattrs': None,
