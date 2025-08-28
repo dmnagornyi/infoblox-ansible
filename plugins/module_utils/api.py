@@ -821,7 +821,7 @@ class WapiModule(WapiBase):
                 if (ib_obj_type == NIOS_HOST_RECORD):
                     # to check only by old_name if dns bypassing is set
                     if not obj_filter['configure_for_dns']:
-                        test_obj_filter = dict([('name', old_name), ('configure_for_dns', False)])
+                        test_obj_filter = dict([('name', old_name)])
                     else:
                         test_obj_filter = dict([('name', old_name), ('view', obj_filter['view'])])
                 # if there are multiple records with the same name and different ip
@@ -844,6 +844,8 @@ class WapiModule(WapiBase):
                     test_obj_filter = dict([('name', old_name)])
                 # get the object reference
                 ib_obj = self.get_object(ib_obj_type, test_obj_filter, return_fields=return_fields)
+                if obj_filter.get('configure_for_dns') is False and ib_obj:
+                    ib_obj = [obj for obj in ib_obj if obj.get('configure_for_dns') is False]
                 if ib_obj:
                     obj_filter['name'] = new_name
                 elif old_ipv4addr_exists and (len(ib_obj) == 0):
@@ -858,7 +860,7 @@ class WapiModule(WapiBase):
                 name = obj_filter['name']
                 # to check only by name if dns bypassing is set
                 if not obj_filter['configure_for_dns']:
-                    test_obj_filter = dict([('name', name), ('configure_for_dns', False)])
+                    test_obj_filter = dict([('name', name)])
                 else:
                     test_obj_filter = dict([('name', name), ('view', obj_filter['view'])])
             elif (ib_obj_type == NIOS_IPV4_FIXED_ADDRESS and 'mac' in obj_filter):
@@ -927,6 +929,8 @@ class WapiModule(WapiBase):
                 return_fields.extend(ipv6addrs_return)
 
             ib_obj = self.get_object(ib_obj_type, test_obj_filter.copy(), return_fields=return_fields)
+            if ib_obj_type == NIOS_HOST_RECORD and obj_filter.get('configure_for_dns') is False and ib_obj:
+                ib_obj = [obj for obj in ib_obj if obj.get('configure_for_dns') is False]
 
             # prevents creation of a new A record with 'new_ipv4addr' when A record with a particular 'old_ipv4addr' is not found
             if old_ipv4addr_exists and (ib_obj is None or len(ib_obj) == 0):
