@@ -193,3 +193,53 @@ class TestNiosHostRecordModule(TestNiosModule):
         wapi.update_object.assert_called_once_with(
             ref, {'comment': 'comment', 'name': 'default'}
         )
+
+    def test_nios_host_record_duplicate_ipv4(self):
+        self.module.params = {
+            'provider': None,
+            'state': 'present',
+            'name': 'ansible',
+            'comment': 'updated comment',
+            'extattrs': None,
+            'ipv4addrs': [{'ipv4addr': '192.168.1.2'}],
+        }
+
+        ref_match = "record:host/ZG5zLm5ldHdvcmtfdmlldyQw:ansible1/true"
+        ref_other = "record:host/ZG5zLm5ldHdvcmtfdmlldyQw:ansible2/true"
+
+        test_object = [
+            {
+                "comment": "old comment",
+                "_ref": ref_match,
+                "name": "ansible",
+                "ipv4addrs": [{"ipv4addr": "192.168.1.2"}],
+                "extattrs": {},
+            },
+            {
+                "comment": "other comment",
+                "_ref": ref_other,
+                "name": "ansible",
+                "ipv4addrs": [{"ipv4addr": "192.168.1.3"}],
+                "extattrs": {},
+            },
+        ]
+
+        test_spec = {
+            "name": {"ib_req": True},
+            "comment": {},
+            "extattrs": {},
+            "ipv4addrs": {},
+        }
+
+        wapi = self._get_wapi(test_object)
+        res = wapi.run('testobject', test_spec)
+
+        self.assertTrue(res['changed'])
+        wapi.update_object.assert_called_once_with(
+            ref_match,
+            {
+                'comment': 'updated comment',
+                'name': 'ansible',
+                'ipv4addrs': [{'ipv4addr': '192.168.1.2'}],
+            },
+        )

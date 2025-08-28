@@ -375,27 +375,32 @@ class WapiModule(WapiBase):
         if not proposed_object.get('configure_for_dns') and proposed_object.get('view') == 'default' \
                 and ib_obj_type == NIOS_HOST_RECORD:
             del proposed_object['view']
+        ref = None
         if ib_obj_ref:
             if len(ib_obj_ref) > 1:
                 for each in ib_obj_ref:
                     # To check for existing A_record with same name with input A_record by IP
                     if each.get('ipv4addr') and each.get('ipv4addr') == proposed_object.get('ipv4addr'):
                         current_object = each
+                        ref = each.get('_ref')
                         break
                     # To check for existing Host_record with same name with input Host_record by IP
                     elif each.get('ipv4addrs') and each.get('ipv4addrs')[0].get('ipv4addr') \
                             == proposed_object.get('ipv4addrs')[0].get('ipv4addr'):
                         current_object = each
+                        ref = each.get('_ref')
+                        break
                     # Else set the current_object with input value
                     else:
                         current_object = obj_filter
                         ref = None
             else:
                 current_object = ib_obj_ref[0]
+                ref = current_object.get('_ref')
             if 'extattrs' in current_object:
                 current_object['extattrs'] = flatten_extattrs(current_object['extattrs'])
-            if current_object.get('_ref'):
-                ref = current_object.pop('_ref')
+            if ref:
+                current_object.pop('_ref', None)
         else:
             current_object = obj_filter
             ref = None
