@@ -49,19 +49,23 @@ options:
         of this object.  The provided text string will be configured on the
         object instance.
     type: str
+    default: ''
   contact:
     description:
       - Contact information for person/team managing or using VLAN.
     type: str
+    default: ''
   department:
     description:
       - Department where VLAN is used.
     type: str
+    default: ''
   description:
     description:
       - Description for the VLAN object, may be potentially used for
         longer VLAN names.
     type: str
+    default: ''
   reserved:
     description:
       - When set VLAN can only be assigned to IPAM object manually.
@@ -154,6 +158,23 @@ EXAMPLES = '''
       username: admin
       password: admin
   connection: local
+
+- name: Create a new vlan with next available id
+  infoblox.nios_modules.nios_vlan:
+    name: ansible-vlan
+    id: "{{
+        lookup('infoblox.nios_modules.nios_next_vlan_id',
+          parent='my_vlanrange',
+          exclude=[1,2],
+          provider=nios_provider)[0]
+        }}"
+    parent: my_vlanrange
+    state: present
+    provider:
+      host: "{{ inventory_hostname_short }}"
+      username: admin
+      password: admin
+  connection: local
 '''
 
 RETURN = ''' # '''
@@ -185,10 +206,10 @@ def main():
         name=dict(required=True, ib_req=True),
         id=dict(type='int', required=True, ib_req=True),
         parent=dict(default='default', transform=parent_transform),
-        comment=dict(),
-        contact=dict(),
-        department=dict(),
-        description=dict(),
+        comment=dict(default=''),
+        contact=dict(default=''),
+        department=dict(default=''),
+        description=dict(default=''),
         reserved=dict(type='bool', default=False),
         extattrs=dict(type='dict'),
     )

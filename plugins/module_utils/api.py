@@ -313,11 +313,33 @@ class WapiModule(WapiBase):
         else:
             self.module.fail_json(msg=to_native(exc))
 
+    def clean_empty_keys(self, current_object, proposed_object):
+        """
+        Removes keys from the proposed_object that are empty and do not exist in current_object.
+        :param current_object: The current object to compare with.
+        :param proposed_object: The proposed object to clean up.
+        :return: Cleaned a proposed_object.
+        """
+        keys_to_remove = []
+
+        for key, proposed_item in iteritems(proposed_object):
+            # Check if the key is empty (None, empty string, empty list, etc.)
+            if proposed_item in [None, '', [], {}, set()]:  # Add more empty checks if needed
+                # If the key doesn't exist in current_object, mark it for removal
+                if key not in current_object:
+                    keys_to_remove.append(key)
+
+        # Remove the identified keys from proposed_object
+        for key in keys_to_remove:
+            del proposed_object[key]
+
+        return proposed_object
+
     def run(self, ib_obj_type, ib_spec):
-        ''' Runs the module and performans configuration tasks
+        ''' Runs the module and perform configuration tasks
         :args ib_obj_type: the WAPI object type to operate against
         :args ib_spec: the specification for the WAPI object as a dict
-        :returns: a results dict
+        :returns:  result dict
         '''
 
         update = new_name = None
@@ -328,7 +350,6 @@ class WapiModule(WapiBase):
         result = {'changed': False}
 
         obj_filter = dict([(k, self.module.params[k]) for k, v in iteritems(ib_spec) if v.get('ib_req')])
-
         # get object reference
         ib_obj_ref, update, new_name = self.get_object_ref(self.module, ib_obj_type, obj_filter, ib_spec)
 
@@ -418,7 +439,7 @@ class WapiModule(WapiBase):
                 if 'default_value' in obj:
                     obj['default_value'] = str(obj['default_value'])
 
-        if (ib_obj_type == NIOS_VLAN):
+        if ib_obj_type == NIOS_VLAN and ib_obj_ref:
             if 'parent' in current_object:
                 current_object['parent'] = current_object['parent']['_ref']
 
@@ -448,7 +469,7 @@ class WapiModule(WapiBase):
             if 'ipv4addrs' in proposed_object and sum(addr.get('use_for_ea_inheritance', False) for addr in proposed_object['ipv4addrs']) > 1:
                 raise AnsibleError('Only one address allowed to be used for extensible attributes inheritance')
             # this check is for idempotency, as if the same ip address shall be passed
-            # add param will be removed, and same exists true for remove case as well.
+            # add param will be removed, and the same exists true for the remove case as well.
             if 'ipv4addrs' in [current_object and proposed_object]:
                 for each in current_object['ipv4addrs']:
                     if each['ipv4addr'] == proposed_object['ipv4addrs'][0]['ipv4addr']:
@@ -464,7 +485,11 @@ class WapiModule(WapiBase):
         proposed_object = self.check_for_new_ipv4addr(proposed_object)
 
         res = None
-        modified = not self.compare_objects(current_object, proposed_object)
+        if ib_obj_type == NIOS_VLAN:
+            # Removes keys from the proposed_object that are empty and do not exist in current_object.
+            # Fix the issue to update the optional fields of the object with default empty values
+            proposed_object = self.clean_empty_keys(current_object, proposed_object)
+        modified = not self.compare_objects(current_object, proposed_object, ib_obj_type)
         if 'extattrs' in proposed_object:
             proposed_object['extattrs'] = normalize_extattrs(proposed_object['extattrs'])
 
@@ -581,9 +606,9 @@ class WapiModule(WapiBase):
             network_view_ref = self.get_object('view', {"name": proposed_object['view']}, return_fields=['network_view'])
             if network_view_ref:
                 network_view = network_view_ref[0].get('network_view')
+                return network_view
         except Exception:
             raise Exception("object with dns_view: %s not found" % (proposed_object['view']))
-        return network_view
 
     def check_if_nios_next_ip_exists(self, proposed_object):
         ''' Check if nios_next_ip argument is passed in ipaddr while creating
@@ -685,7 +710,7 @@ class WapiModule(WapiBase):
     def verify_list_order(self, proposed_data, current_data):
         return len(proposed_data) == len(current_data) and all(a == b for a, b in zip(proposed_data, current_data))
 
-    def compare_objects(self, current_object, proposed_object):
+    def compare_objects(self, current_object, proposed_object, ib_obj_type=None):
         for key, proposed_item in iteritems(proposed_object):
             current_item = current_object.get(key)
 
@@ -702,31 +727,40 @@ class WapiModule(WapiBase):
                 # equal, and False will be returned before comparing the list items
                 # this code part will work for members' assignment
 
-                if (key in ('members', 'options', 'delegate_to', 'forwarding_servers', 'stub_members', 'ssh_keys', 'vlans')
-                        and (len(proposed_item) != len(current_item))):
+                if key in ('members', 'options', 'delegate_to', 'forwarding_servers', 'stub_members', 'ssh_keys', 'vlans') \
+                        and len(proposed_item) != len(current_item):
                     return False
 
                 # Validate the Sequence of the List data
                 if key in ('external_servers', 'list_values') and not self.verify_list_order(proposed_item, current_item):
                     return False
 
-                if key == 'ipv4addrs':
-                    for subitem in proposed_item:
-                        if current_item:
-                            # Host IPv4addrs wont contain use_nextserver and nextserver
-                            # If DHCP is false.
-                            dhcp_flag = current_item[0].get('configure_for_dhcp', False)
-                            use_nextserver = subitem.get('use_nextserver', False)
-                            if key == 'ipv4addrs' and not dhcp_flag:
-                                subitem.pop('use_nextserver', None)
-                                subitem.pop('nextserver', None)
-                            elif key == 'ipv4addrs' and dhcp_flag and not use_nextserver:
-                                subitem.pop('nextserver', None)
-                        if not self.issubset(subitem, current_item):
-                            return False
+                for subitem in proposed_item:
+                    if not isinstance(subitem, dict):
+                        continue  # Skip non-dict items
 
-                # If the lists are of a different length, the objects and order of element mismatch
-                # Ignore DHCP options while comparing due to extra num param is get response
+                    if ib_obj_type == NIOS_HOST_RECORD and key == 'ipv4addrs':
+                        current_config = current_item[0]
+                        dhcp_flag = current_config.get('configure_for_dhcp', False)
+                        # Host IPv4addrs wont contain use_nextserver and nextserver
+                        # If DHCP is false.
+                        use_nextserver = subitem.get('use_nextserver', False)
+
+                        if not dhcp_flag:
+                            try:
+                                subitem.pop('use_nextserver')
+                                subitem.pop('nextserver')
+                            except KeyError:
+                                pass
+                        elif dhcp_flag and not use_nextserver:
+                            try:
+                                subitem.pop('nextserver')
+                            except KeyError:
+                                pass
+
+                    if not self.issubset(subitem, current_item):
+                        return False
+
                 if key == 'logic_filter_rules' and proposed_item != current_item:
                     return False
 
@@ -742,7 +776,7 @@ class WapiModule(WapiBase):
                     if not self.compare_extattrs(current_extattrs, proposed_extattrs):
                         return False
 
-                if self.compare_objects(current_item, proposed_item) is False:
+                if self.compare_objects(current_item, proposed_item, ib_obj_type) is False:
                     return False
                 else:
                     continue
@@ -759,6 +793,10 @@ class WapiModule(WapiBase):
         old_name = new_name = None
         old_ipv4addr_exists = old_text_exists = False
         next_ip_exists = False
+
+        if ib_obj_type == NIOS_VLAN:
+            obj_filter.update({'parent': ib_spec['parent']['transform'](self.module)})
+
         if ('name' in obj_filter):
             # gets and returns the current object based on name/old_name passed
             try:
@@ -786,7 +824,7 @@ class WapiModule(WapiBase):
                         test_obj_filter = dict([('name', old_name)])
                     else:
                         test_obj_filter = dict([('name', old_name), ('view', obj_filter['view'])])
-                # if there are multiple records with same name and different ip
+                # if there are multiple records with the same name and different ip
                 elif (ib_obj_type == NIOS_A_RECORD):
                     test_obj_filter = dict([('name', old_name), ('ipv4addr', obj_filter['ipv4addr'])])
                     try:
@@ -799,6 +837,9 @@ class WapiModule(WapiBase):
                         test_obj_filter['ipv4addr'] = ipaddr
                     else:
                         del test_obj_filter['ipv4addr']
+                elif ib_obj_type == NIOS_VLAN:
+                    test_obj_filter = dict([
+                        ('name', old_name), ('id', obj_filter['id']), ('parent', obj_filter['parent'])])
                 else:
                     test_obj_filter = dict([('name', old_name)])
                 # get the object reference
@@ -980,6 +1021,7 @@ class WapiModule(WapiBase):
                 # del key 'members' as nios_network get_object fails with the key present
                 # Don't reinstate the field after as it is not valid for network containers
                 del ib_spec['members']
+                del ib_spec['vlans']
 
             ib_obj = self.get_object(ib_obj_type, obj_filter.copy(), return_fields=list(ib_spec.keys()))
             # reinstate the 'template' and 'members' key
