@@ -821,7 +821,7 @@ class WapiModule(WapiBase):
                 if (ib_obj_type == NIOS_HOST_RECORD):
                     # to check only by old_name if dns bypassing is set
                     if not obj_filter['configure_for_dns']:
-                        test_obj_filter = dict([('name', old_name)])
+                        test_obj_filter = dict([('name', old_name), ('configure_for_dns', False)])
                     else:
                         test_obj_filter = dict([('name', old_name), ('view', obj_filter['view'])])
                 # if there are multiple records with the same name and different ip
@@ -858,7 +858,7 @@ class WapiModule(WapiBase):
                 name = obj_filter['name']
                 # to check only by name if dns bypassing is set
                 if not obj_filter['configure_for_dns']:
-                    test_obj_filter = dict([('name', name)])
+                    test_obj_filter = dict([('name', name), ('configure_for_dns', False)])
                 else:
                     test_obj_filter = dict([('name', name), ('view', obj_filter['view'])])
             elif (ib_obj_type == NIOS_IPV4_FIXED_ADDRESS and 'mac' in obj_filter):
